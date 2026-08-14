@@ -4,6 +4,7 @@ import {
   ArrowUp, 
   Sparkles, 
   Mic, 
+  MicOff,
   FileText, 
   CheckCircle, 
   X, 
@@ -15,9 +16,13 @@ import {
   BookOpen,
   Trash2,
   ArrowRight,
-  BarChart2
+  AlertCircle,
+  Square,
+  Zap,
+  ChevronDown
 } from 'lucide-react';
 import { parseFileContent } from '../utils/fileParser';
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 
 const SAMPLES = [
   {
@@ -31,6 +36,47 @@ const SAMPLES = [
   {
     title: "Computer Science: Data Structures",
     text: `Data structures organize and store data for efficient access and modification. Arrays provide O(1) random access by index. Binary Search Trees maintain sorted elements allowing logarithmic average lookup times. Hash tables store key-value pairs using hash functions for near constant-time search operations.`
+  }
+];
+
+const PROVIDERS = [
+  {
+    id: 'google',
+    name: 'Google Gemini',
+    icon: '✦',
+    badgeClass: 'badge-google',
+    color: '#4F46E5',
+    defaultModel: 'gemini-2.5-flash',
+    models: [
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Primary)' },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+      { id: 'gemini-flash-latest', label: 'Gemini Flash Latest' }
+    ]
+  },
+  {
+    id: 'groq',
+    name: 'Groq AI',
+    icon: '⚡',
+    badgeClass: 'badge-groq',
+    color: '#10B981',
+    defaultModel: 'llama-3.3-70b-versatile',
+    models: [
+      { id: 'llama-3.3-70b-versatile', label: 'Groq: Llama 3.3 70B' },
+      { id: 'mixtral-8x7b-32768', label: 'Groq: Mixtral 8x7B' },
+      { id: 'gemma2-9b-it', label: 'Groq: Gemma 2 9B' }
+    ]
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic Claude',
+    icon: '✳',
+    badgeClass: 'badge-anthropic',
+    color: '#D97706',
+    defaultModel: 'claude-3-5-sonnet-20241022',
+    models: [
+      { id: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+      { id: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' }
+    ]
   }
 ];
 
@@ -57,8 +103,55 @@ export function ClaudeInputSection({
   const [fileError, setFileError] = useState(null);
   const [uploadedFileName, setUploadedFileName] = useState(null);
   const [greeting, setGreeting] = useState('');
+  const [recordingDuration, setRecordingDuration] = useState(0);
+
+  // Multi-Agent Selection State (Default: Google Gemini 2.5 Flash)
+  const [selectedProvider, setSelectedProvider] = useState('google');
+  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
 
   const fileInputRef = useRef(null);
+  const timerRef = useRef(null);
+
+  // Enhanced Speech-To-Text Lecture Dictation Hook with Real-time Reactive Waveforms
+  const {
+    isSupported: voiceSupported,
+    isListening,
+    isTranscribing,
+    transcript: speechTranscript,
+    interimTranscript,
+    audioLevels = [18, 28, 42, 28, 18],
+    error: speechError,
+    startListening,
+    stopListening,
+    transcribeAudioWithAI,
+    resetTranscript
+  } = useSpeechRecognition({ continuous: true });
+
+  // Sync speech transcript directly into the textarea in real time
+  useEffect(() => {
+    if (speechTranscript) {
+      setTextInput(speechTranscript);
+      if (!topicHint && speechTranscript.length > 15) {
+        const firstWords = speechTranscript.split(' ').slice(0, 4).join(' ');
+        setTopicHint(firstWords.replace(/[^\w\s]/gi, ''));
+      }
+    }
+  }, [speechTranscript]);
+
+  // Voice recording timer counter
+  useEffect(() => {
+    if (isListening) {
+      setRecordingDuration(0);
+      timerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isListening]);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -72,6 +165,60 @@ export function ClaudeInputSection({
       setGreeting("It’s an evening study session.");
     }
   }, []);
+
+  const handleProviderChange = (provId) => {
+    setSelectedProvider(provId);
+    const prov = PROVIDERS.find(p => p.id === provId);
+    if (prov) {
+      setSelectedModel(prov.defaultModel);
+    }
+  };
+
+  const handleToggleVoice = async () => {
+    if (isListening) {
+      const audioBlob = await stopListening();
+      if (audioBlob && audioBlob.size > 500) {
+        const aiText = await transcribeAudioWithAI(audioBlob);
+        if (aiText) {
+          setTextInput(aiText);
+          const firstWords = aiText.split(' ').slice(0, 4).join(' ');
+          setTopicHint(firstWords.replace(/[^\w\s]/gi, ''));
+        }
+      }
+    } else {
+      resetTranscript();
+      await startListening();
+    }
+  };
+
+  const handleVoiceStopAndGenerate = async () => {
+    const audioBlob = await stopListening();
+    let finalContent = (textInput || speechTranscript || '').trim();
+
+    if (audioBlob && audioBlob.size > 500) {
+      const aiText = await transcribeAudioWithAI(audioBlob);
+      if (aiText) {
+        finalContent = aiText;
+        setTextInput(aiText);
+        const firstWords = aiText.split(' ').slice(0, 4).join(' ');
+        setTopicHint(firstWords.replace(/[^\w\s]/gi, ''));
+      }
+    }
+
+    if (!finalContent || loading) return;
+
+    const options = {
+      provider: selectedProvider,
+      model: selectedModel
+    };
+    onGenerate(finalContent, topicHint, numCards, numQuizzes, options);
+  };
+
+  const formatTimer = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleFileUpload = async (file) => {
     if (!file) return;
@@ -96,8 +243,15 @@ export function ClaudeInputSection({
 
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
+    if (isListening) stopListening();
     if (!textInput.trim() || loading) return;
-    onGenerate(textInput, topicHint, numCards, numQuizzes);
+
+    const options = {
+      provider: selectedProvider,
+      model: selectedModel
+    };
+
+    onGenerate(textInput, topicHint, numCards, numQuizzes, options);
   };
 
   const loadSample = (sample) => {
@@ -106,25 +260,81 @@ export function ClaudeInputSection({
     setFileError(null);
   };
 
+  const activeProvObj = PROVIDERS.find(p => p.id === selectedProvider) || PROVIDERS[0];
+  const activeModelObj = activeProvObj.models.find(m => m.id === selectedModel) || activeProvObj.models[0];
+
   return (
     <div className="claude-input-container">
       
-      {/* Claude-Style Greeting Headline */}
-      <div className="claude-greeting-row">
-        <span className="claude-asterisk">✳</span>
-        <h1 className="claude-greeting-text">{greeting}</h1>
+      {/* Top Greeting */}
+      <div className="agent-header-row">
+        <div className="claude-greeting-row">
+          <span className="claude-asterisk">{activeProvObj.icon}</span>
+          <h1 className="claude-greeting-text">{greeting}</h1>
+        </div>
       </div>
 
-      {/* Claude Prompt Card Box */}
+      {/* Main AI Prompt Card Box */}
       <div className="claude-prompt-card">
         
         <form onSubmit={handleSubmit} className="claude-prompt-form">
           
+          {/* Active Voice Lecture Recording Live Banner */}
+          {isListening && (
+            <div className="voice-recording-banner glass-panel">
+              <div className="voice-banner-left">
+                <span className="recording-pulse-dot"></span>
+                <span className="voice-banner-title">Listening to Voice...</span>
+                <span className="voice-timer-badge">{formatTimer(recordingDuration)}</span>
+                
+                {/* Real-Time Reactive Audio Waveform Bars */}
+                <div className="waveform-anim real-time-waveform" title="Live Voice Frequency Meter">
+                  {audioLevels.map((lvl, idx) => (
+                    <span 
+                      key={idx} 
+                      className="waveform-bar real-time-bar"
+                      style={{ height: `${lvl}%` }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="voice-banner-actions">
+                <button
+                  type="button"
+                  className="btn-voice-stop"
+                  onClick={handleToggleVoice}
+                >
+                  <Square size={13} />
+                  <span>Done Speaking</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-voice-generate"
+                  onClick={handleVoiceStopAndGenerate}
+                  disabled={loading || isTranscribing}
+                >
+                  <Zap size={14} />
+                  <span>Command {activeProvObj.name.split(' ')[0]}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Voice Audio Transcription Natural Indicator */}
+          {isTranscribing && (
+            <div className="natural-ai-thinking-card" style={{ margin: '8px 0 12px' }}>
+              <Sparkles className="sparkle-spin-icon" size={16} />
+              <span>✦ Converting your voice notes into text...</span>
+            </div>
+          )}
+
           {/* Main Auto-expanding Input Area */}
           <div className="claude-textarea-container">
             <textarea
               className="claude-textarea"
-              placeholder="How can I help you study today? Paste notes, textbook excerpt, or topic summary..."
+              placeholder={`Ask ${activeProvObj.name} to generate flashcards & quizzes... Speak into mic or paste notes/topics...`}
               rows={4}
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
@@ -135,6 +345,13 @@ export function ClaudeInputSection({
                 }
               }}
             />
+
+            {/* Real-time Interim Live Voice Transcription Preview */}
+            {isListening && interimTranscript && (
+              <div className="voice-interim-preview">
+                <span>🎙️ "{interimTranscript}"</span>
+              </div>
+            )}
           </div>
 
           {/* Optional Topic Field Bar */}
@@ -221,7 +438,7 @@ export function ClaudeInputSection({
           {/* Bottom Toolbar inside Input Card */}
           <div className="claude-toolbar">
             
-            {/* Left Controls: Attach File + Presets + Quantity config */}
+            {/* Left Controls: Attach File (+) + Model Dropdown */}
             <div className="toolbar-left">
               
               {/* Attach File (+) Button */}
@@ -231,7 +448,7 @@ export function ClaudeInputSection({
                 title="Attach PDF or Word Document (.docx)"
                 onClick={() => fileInputRef.current?.click()}
               >
-                {parsingFile ? <RefreshCw size={18} className="spin-icon" /> : <Plus size={20} />}
+                {parsingFile ? <RefreshCw size={18} className="spin-icon" /> : <Plus size={19} />}
               </button>
 
               <input 
@@ -242,82 +459,147 @@ export function ClaudeInputSection({
                 onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
               />
 
-              {/* Quantity Options Pill Button */}
-              <button 
-                type="button"
-                className={`claude-pill-btn ${showConfig ? 'active' : ''}`}
-                onClick={() => setShowConfig(!showConfig)}
-                title="Set number of flashcards and quiz questions"
-              >
-                <Sliders size={13} />
-                <span>{numCards} Cards, {numQuizzes} Qs</span>
-              </button>
-
-              {/* Topic Hint Toggle Button */}
-              <button 
-                type="button"
-                className={`claude-pill-btn ${topicHint ? 'active' : ''}`}
-                onClick={() => setShowTopicField(!showTopicField)}
-              >
-                <span>{topicHint ? `Topic: ${topicHint}` : 'Add Topic'}</span>
-              </button>
-
-              {/* Preset Sample Chips */}
-              <div className="claude-preset-chips">
-                {SAMPLES.map((s, idx) => (
-                  <button 
-                    key={idx} 
-                    type="button" 
-                    className="claude-sample-chip"
-                    onClick={() => loadSample(s)}
-                  >
-                    {s.title.split(':')[0]}
-                  </button>
-                ))}
+              {/* Unified All-in-One AI Agent & Model Dropdown */}
+              <div className="claude-model-pill" title="Select AI Model">
+                <select 
+                  value={`${selectedProvider}:${selectedModel}`}
+                  onChange={(e) => {
+                    const [prov, mdl] = e.target.value.split(':');
+                    setSelectedProvider(prov);
+                    setSelectedModel(mdl);
+                  }}
+                  className="model-select-inline"
+                  aria-label="Select AI Agent and Model"
+                >
+                  {PROVIDERS.map((prov) => (
+                    <optgroup key={prov.id} label={`${prov.icon} ${prov.name}`}>
+                      {prov.models.map((m) => (
+                        <option key={m.id} value={`${prov.id}:${m.id}`}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="model-dropdown-arrow" />
               </div>
 
             </div>
 
-            {/* Right Controls: Model Pill + Submit Arrow */}
+            {/* Right Controls: Highlighted Voice Button + Circular Submit Arrow */}
             <div className="toolbar-right">
               
-              {/* Model Indicator Pill */}
-              <div className="claude-model-pill">
-                <Brain size={14} className="text-accent" />
-                <span>Claude 3.5 Sonnet</span>
-              </div>
+              {/* Highlighted Voice Lecture Dictation Button with Reactive Equalizer */}
+              <button 
+                type="button"
+                className={`claude-voice-highlight-btn ${isListening ? 'recording' : ''}`}
+                onClick={handleToggleVoice}
+                title={isListening ? "Stop Voice Recording & Transcribe" : "Speak Chaotic Lecture Summary (Voice AI Feature)"}
+              >
+                <div className="voice-btn-inner">
+                  {isListening ? (
+                    <div className="mini-reactive-equalizer">
+                      {audioLevels.slice(0, 4).map((lvl, idx) => (
+                        <span 
+                          key={idx} 
+                          className="mini-meter-bar" 
+                          style={{ height: `${Math.max(20, lvl * 0.85)}%` }} 
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <Mic size={16} className="voice-mic-svg" />
+                  )}
+                  <span className="voice-btn-label">
+                    {isListening ? `${formatTimer(recordingDuration)}` : 'Speak Lecture'}
+                  </span>
+                  {isListening && <span className="voice-live-dot" />}
+                </div>
+              </button>
 
-              {/* Submit Send Button */}
+              {/* Submit Send Button (Circle with Arrow) */}
               <button 
                 type="submit" 
                 className="claude-submit-btn"
-                disabled={loading || !textInput.trim()}
+                disabled={loading || (!textInput.trim() && !isListening)}
                 title="Generate Study Kit (Ctrl + Enter)"
               >
-                {loading ? <RefreshCw size={18} className="spin-icon" /> : <ArrowUp size={18} />}
+                {loading ? <RefreshCw size={18} className="spin-icon" /> : <ArrowRight size={18} />}
               </button>
 
             </div>
 
-          </div>
-
-          {/* Sub-bar Session Meter */}
-          <div className="claude-submeter-bar">
-            <div className="submeter-left">
-              <span>SM-2 Engine Active</span>
-              <span className="dot-divider">•</span>
-              <span>Target: {numCards} Flashcards & {numQuizzes} Quizzes</span>
-              <span className="dot-divider">•</span>
-              <span>Streak: {currentStreak}d 🔥</span>
-            </div>
-            <div className="submeter-right">
-              <span>Ctrl + Enter to generate</span>
-            </div>
           </div>
 
         </form>
 
       </div>
+
+      {/* Helper Chips Ribbon Row - Positioned Below Main Input Box */}
+      <div className="claude-chips-ribbon">
+        
+        {/* Highlighted Voice Lecture Quick Chip */}
+        <button 
+          type="button"
+          className={`claude-pill-chip voice-quick-chip ${isListening ? 'active recording' : ''}`}
+          onClick={handleToggleVoice}
+          title="Speak chaotic lecture notes into the microphone"
+        >
+          <Mic size={13} className="voice-chip-icon" />
+          <span>{isListening ? 'Listening to Lecture...' : 'Speak Chaotic Lecture'}</span>
+        </button>
+
+        {/* Quantity Options Pill Button */}
+        <button 
+          type="button"
+          className={`claude-pill-chip ${showConfig ? 'active' : ''}`}
+          onClick={() => setShowConfig(!showConfig)}
+          title="Set number of flashcards and quiz questions"
+        >
+          <Sliders size={13} />
+          <span>{numCards} Cards, {numQuizzes} Qs</span>
+        </button>
+
+        {/* Topic Hint Toggle Button */}
+        <button 
+          type="button"
+          className={`claude-pill-chip ${topicHint ? 'active' : ''}`}
+          onClick={() => setShowTopicField(!showTopicField)}
+        >
+          <span>{topicHint ? `Topic: ${topicHint}` : 'Add Topic'}</span>
+        </button>
+
+        {/* Preset Sample Subject Chips */}
+        {SAMPLES.map((s, idx) => (
+          <button 
+            key={idx} 
+            type="button" 
+            className="claude-pill-chip"
+            onClick={() => loadSample(s)}
+          >
+            {s.title.split(':')[0]}
+          </button>
+        ))}
+
+      </div>
+
+      {/* Natural Human-Friendly Sub-bar Status */}
+      <div className="claude-submeter-bar" style={{ marginTop: '8px' }}>
+        <div className="submeter-left">
+          <span>Ready to build <strong>{numCards} flashcards & {numQuizzes} quizzes</strong> with {activeProvObj.name.split(' ')[0]}</span>
+        </div>
+        <div className="submeter-right">
+          <span>Press <strong>Ctrl + Enter</strong> to generate</span>
+        </div>
+      </div>
+
+      {/* Voice Recognition Error */}
+      {speechError && (
+        <div className="alert-box alert-warning small-alert">
+          <AlertCircle size={16} />
+          <span>{speechError}</span>
+        </div>
+      )}
 
       {/* File Parsing Error */}
       {fileError && (
@@ -341,75 +623,13 @@ export function ClaudeInputSection({
         </div>
       )}
 
-      {/* Status Indicator */}
-      {parseStatus && (
-        <div className="status-indicator centered">
-          <RefreshCw className="spin-icon" size={16} />
-          <span>{parseStatus}</span>
-        </div>
-      )}
-
-      {/* Saved Study Kits Library Section */}
-      {savedKits && savedKits.length > 0 && (
-        <div className="saved-kits-library">
-          <div className="saved-library-header">
-            <div className="lib-title-row">
-              <BookOpen size={18} className="text-accent" />
-              <h3>Your Saved Topic Kits</h3>
-            </div>
-            <span className="lib-count-badge">{savedKits.length} Kits</span>
-          </div>
-
-          <div className="saved-kits-grid">
-            {savedKits.map((kit) => (
-              <div key={kit.id} className="saved-kit-card glass-panel">
-                
-                <div className="kit-card-top">
-                  <span className="kit-date">{kit.createdAt}</span>
-                  <button 
-                    className="delete-kit-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onDeleteSavedKit) onDeleteSavedKit(kit.id);
-                    }}
-                    title="Delete Study Kit"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-
-                <h4 className="kit-topic-title">{kit.topic}</h4>
-
-                {/* Completion Progress Bar */}
-                <div className="kit-progress-wrapper">
-                  <div className="kit-progress-labels">
-                    <span className="prog-text">Completion Progress</span>
-                    <span className="prog-val">{kit.completedPercent || 10}%</span>
-                  </div>
-                  <div className="kit-progress-bg">
-                    <div 
-                      className="kit-progress-fill" 
-                      style={{ width: `${kit.completedPercent || 10}%` }}
-                    ></div>
-                  </div>
-                </div>
-
-                <div className="kit-meta-tags">
-                  <span className="kit-tag"><Layers size={12} /> {kit.flashcardCount} Cards</span>
-                  <span className="kit-tag"><HelpCircle size={12} /> {kit.quizCount} Quizzes</span>
-                </div>
-
-                <button 
-                  className="btn btn-secondary btn-sm kit-open-btn"
-                  onClick={() => onLoadSavedKit && onLoadSavedKit(kit)}
-                >
-                  <span>Review Kit</span>
-                  <ArrowRight size={14} />
-                </button>
-
-              </div>
-            ))}
-          </div>
+      {/* Natural AI Thinking & Progress Banner */}
+      {(loading || parseStatus) && (
+        <div className="natural-ai-thinking-card">
+          <Sparkles className="sparkle-spin-icon" size={17} />
+          <span className="thinking-text">
+            {parseStatus || `✦ ${activeProvObj.name.split(' ')[0]} is preparing your flashcards & quiz...`}
+          </span>
         </div>
       )}
 

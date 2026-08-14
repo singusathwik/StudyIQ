@@ -3,8 +3,8 @@ import { studyResponseSchema } from '../schemas/studySchema';
 
 /**
  * Custom Hook: useGenerate
- * Handles AI generation API requests, AbortController cancellation,
- * Zod response validation, error states, and dev debug overrides.
+ * Handles natural AI study kit generation, friendly status updates,
+ * AbortController cancellation, and Zod response validation.
  */
 export function useGenerate() {
   const [loading, setLoading] = useState(false);
@@ -14,7 +14,7 @@ export function useGenerate() {
 
   const abortControllerRef = useRef(null);
 
-  const generate = useCallback(async (textInput, topicHint = '', numCards = 10, numQuizzes = 5, debugOverride = null) => {
+  const generate = useCallback(async (textInput, topicHint = '', numCards = 10, numQuizzes = 5, options = {}, debugOverride = null) => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -24,7 +24,19 @@ export function useGenerate() {
 
     setLoading(true);
     setError(null);
-    setParseStatus("Sending material to AI engine...");
+    const agentName = options.provider === 'groq' ? 'Groq' : (options.provider === 'anthropic' ? 'Claude' : 'Gemini');
+    setParseStatus(`✦ ${agentName} is thinking & analyzing your notes...`);
+
+    // Friendly progressive status updates
+    const statusTimer1 = setTimeout(() => {
+      if (controller.signal.aborted) return;
+      setParseStatus(`✦ Distilling core concepts & writing ${numCards} flashcards...`);
+    }, 2200);
+
+    const statusTimer2 = setTimeout(() => {
+      if (controller.signal.aborted) return;
+      setParseStatus(`✦ Crafting ${numQuizzes} interactive quiz questions...`);
+    }, 4500);
 
     try {
       if (debugOverride) {
@@ -44,39 +56,52 @@ export function useGenerate() {
         }
 
         if (debugOverride === 'network') {
-          throw new Error("Network connection failed (Simulated 500 Server Error)");
+          throw new Error("Network connection interrupted. Please try again.");
         }
 
         if (debugOverride === 'timeout') {
-          throw new Error("Request timed out after 10,000ms (Simulated Timeout)");
+          throw new Error("Request timed out. Please try again.");
         }
       }
 
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textInput, topicHint, numCards, numQuizzes }),
+        body: JSON.stringify({ 
+          text: textInput, 
+          topicHint, 
+          numCards, 
+          numQuizzes,
+          provider: options.provider || 'google',
+          model: options.model,
+          customApiKey: options.customApiKey
+        }),
         signal: controller.signal
       });
 
+      clearTimeout(statusTimer1);
+      clearTimeout(statusTimer2);
+
       if (!response.ok) {
-        throw new Error(`Server returned HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(`Server returned status ${response.status}. Please check prompt and try again.`);
       }
 
       const rawJson = await response.json();
 
       if (controller.signal.aborted) return;
 
-      setParseStatus("Validating structured response with Zod...");
+      setParseStatus("✦ Finalizing and organizing your study deck...");
       validateAndSetData(rawJson);
 
     } catch (err) {
+      clearTimeout(statusTimer1);
+      clearTimeout(statusTimer2);
+
       if (err.name === 'AbortError') {
-        console.log("Generation request was aborted by user or newer request.");
         return;
       }
       console.error("useGenerate Error:", err);
-      setError(err.message || "An unexpected error occurred during study material generation.");
+      setError(err.message || "Could not generate study kit. Please try again.");
       setLoading(false);
       setParseStatus(null);
     }
@@ -87,8 +112,7 @@ export function useGenerate() {
 
     if (!result.success) {
       console.error("Zod Schema Validation Failure:", result.error.format());
-      const firstError = result.error.errors[0]?.message || "Schema mismatch";
-      setError(`Data Validation Failed: ${firstError}. Please retry or edit prompt.`);
+      setError("We received the material but couldn't parse all cards. Please click generate again.");
       setData(null);
     } else {
       setData(result.data);
@@ -104,7 +128,7 @@ export function useGenerate() {
       abortControllerRef.current.abort();
       setLoading(false);
       setParseStatus(null);
-      setError("Generation canceled by user.");
+      setError("Generation paused.");
     }
   }, []);
 

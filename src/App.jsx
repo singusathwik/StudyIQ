@@ -8,6 +8,7 @@ import { ProgressDashboard } from './components/ProgressDashboard';
 import { DebugPanel } from './components/DebugPanel';
 import { ShareExportModal } from './components/ShareExportModal';
 import { ReviewSubjectModal } from './components/ReviewSubjectModal';
+import { Sidebar } from './components/Sidebar';
 
 import { useGenerate } from './hooks/useGenerate';
 import { useSpacedRepetition } from './hooks/useSpacedRepetition';
@@ -17,8 +18,9 @@ import { useSavedKits } from './hooks/useSavedKits';
 import { decodeShareableURL } from './utils/exportShare';
 
 export default function App() {
-  // App Navigation: 'home', 'create', 'flashcards', 'quiz', 'dashboard'
-  const [activeTab, setActiveTab] = useState('home');
+  // App Navigation: 'create' (default study studio), 'flashcards', 'quiz', 'dashboard'
+  const [activeTab, setActiveTab] = useState('create');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('study_assistant_theme') === 'dark';
   });
@@ -112,9 +114,10 @@ export default function App() {
     }
   }, [studySet, importDeck, saveKit]);
 
-  const handleStartGenerate = (text, topicHint, numCards, numQuizzes) => {
-    generate(text, topicHint, numCards, numQuizzes);
+  const handleStartGenerate = (text, topicHint, numCards, numQuizzes, options) => {
+    generate(text, topicHint, numCards, numQuizzes, options);
   };
+
 
   const handleInjectDebug = (overrideType) => {
     generate("Sample study notes for debug testing", "Debug Mode", 6, 5, overrideType);
@@ -232,31 +235,51 @@ export default function App() {
     .filter(b => ['mcq', 'true_false', 'fill_blank'].includes(b.type))
     .reduce((acc, b) => acc + (b.items?.length || 0), 0);
 
-  return (
-    <div className="app-root">
-      
-      {/* Top Persistent Header Bar */}
-      <Header 
-        xp={xp}
-        level={level}
-        progressToNextLevel={progressToNextLevel}
-        currentStreak={currentStreak}
-        darkMode={darkMode}
-        setDarkMode={setDarkMode}
-        dueCount={dueCount}
-        onStartDueReview={() => setShowReviewModal(true)}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        onSelectStudySpace={handleSelectStudySpace}
-        hasStudySet={!!studySet}
-        flashcardCount={currentFlashcards.length}
-        quizCount={currentQuizCount}
-        showDebug={showDebug}
-        setShowDebug={setShowDebug}
-      />
+  const isHome = activeTab === 'home';
+  const showSidebar = sidebarOpen && !isHome;
 
-      {/* Main Content Workspace */}
-      <main className="main-content focus-study-workspace">
+  return (
+    <div className={`app-layout-container ${showSidebar ? 'sidebar-open' : 'sidebar-closed'} ${isHome ? 'layout-home' : ''}`}>
+      
+      {/* ChatGPT-Style Left Navigation & History Sidebar (Hidden on Homepage) */}
+      {!isHome && (
+        <Sidebar 
+          isOpen={sidebarOpen}
+          onToggle={() => setSidebarOpen(!sidebarOpen)}
+          savedKits={savedKits}
+          onLoadSavedKit={handleLoadSavedKit}
+          onDeleteSavedKit={deleteKit}
+          onNewPrompt={handleSelectStudySpace}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          currentTopic={studySet?.topic}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+          xp={xp}
+          level={level}
+          currentStreak={currentStreak}
+          dueCount={dueCount}
+          onStartDueReview={() => setShowReviewModal(true)}
+          flashcardCount={currentFlashcards.length}
+          quizCount={currentQuizCount}
+          hasStudySet={!!studySet}
+        />
+      )}
+
+      <div className="app-main-viewport">
+        
+        {/* Top Minimal Header Bar (Gamification stats) */}
+        <Header 
+          xp={xp}
+          level={level}
+          progressToNextLevel={progressToNextLevel}
+          currentStreak={currentStreak}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+        />
+
+        {/* Main Content Workspace */}
+        <main className="main-content focus-study-workspace">
         
         {/* Dev Debug Panel Overlay */}
         {showDebug && (
@@ -379,6 +402,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      </div>
 
     </div>
   );
