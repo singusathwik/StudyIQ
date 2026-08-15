@@ -20,7 +20,7 @@ import { decodeShareableURL } from './utils/exportShare';
 export default function App() {
   // App Navigation: 'create' (default study studio), 'flashcards', 'quiz', 'dashboard'
   const [activeTab, setActiveTab] = useState('create');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('study_assistant_theme') === 'dark';
   });
