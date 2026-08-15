@@ -2,6 +2,8 @@
   "name": "student-assistant",
   "private": true,
   "version": "1.0.0",
+  "description": "StudyIQ - AI-Powered Study Assistant with Smart Flashcards, Quiz Arena, and Spaced Repetition",
+  "homepage": "https://study-iq-five.vercel.app/",
   "type": "module",
   "scripts": {
     "dev": "vite",

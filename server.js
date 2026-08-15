@@ -1,3 +1,4 @@
+// StudyIQ Express Backend Server & Local AI Generation Proxy
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';

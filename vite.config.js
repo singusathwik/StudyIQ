@@ -1,3 +1,4 @@
+// StudyIQ Vite Configuration with AI Local Proxy
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import dotenv from 'dotenv';

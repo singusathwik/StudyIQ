@@ -1,3 +1,4 @@
+// StudyIQ Serverless API Route - Vercel Generation Handler
 import { Anthropic } from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
