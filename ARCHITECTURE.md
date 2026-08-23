@@ -164,9 +164,11 @@ Implements the verified **SuperMemo SM-2 mathematical model**:
      │ • Routing: vercel.json      │                     │   requirements.txt          │
      │ • Framework: Vite + React   │                     │ • Command: streamlit run    │
      │ • Serverless: /api/generate │                     │   app.py --port $PORT       │
-     │ • Live URL:                 │                     │ • Config: render.yaml       │
-     │   study-iq-five.vercel.app  │                     │ • Live Streamlit Dashboard  │
+     │ • Live URL:                 │                     │ • Live Streamlit Dashboard: │
+     │   study-iq-five.vercel.app  │                     │   studyiq-30yo.onrender.com │
      └─────────────────────────────┘                     └─────────────────────────────┘
 ```
 
 Both deployment targets operate in parallel from the same repository with zero build conflicts or file overrides.
+- 🌐 **Live React Application (Vercel)**: [https://study-iq-five.vercel.app/](https://study-iq-five.vercel.app/)
+- 🖥️ **Live Streamlit Studio (Render)**: [https://studyiq-30yo.onrender.com/](https://studyiq-30yo.onrender.com/)

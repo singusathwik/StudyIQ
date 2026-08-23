@@ -204,9 +204,11 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("""
-    <div style="font-size: 0.8rem; color: #94a3b8;">
-        🌐 <b>Live Web App (Vercel)</b><br>
-        <a href="https://study-iq-five.vercel.app/" target="_blank" style="color: #818cf8; text-decoration: none; font-weight: 600;">study-iq-five.vercel.app ↗</a>
+    <div style="font-size: 0.8rem; color: #94a3b8; line-height: 1.6;">
+        🌐 <b>Live React App (Vercel)</b><br>
+        <a href="https://study-iq-five.vercel.app/" target="_blank" style="color: #818cf8; text-decoration: none; font-weight: 600;">study-iq-five.vercel.app ↗</a><br>
+        🖥️ <b>Live Streamlit App (Render)</b><br>
+        <a href="https://studyiq-30yo.onrender.com/" target="_blank" style="color: #34d399; text-decoration: none; font-weight: 600;">studyiq-30yo.onrender.com ↗</a>
     </div>
     """, unsafe_allow_html=True)
 
